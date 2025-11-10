@@ -1,0 +1,272 @@
+# ============================================================================
+# .gitignore - EDR Evasion Syscalls Project
+# ============================================================================
+
+# ============================================================================
+# Fichiers Compilés
+# ============================================================================
+
+# Exécutables Windows
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Fichiers objets
+*.o
+*.obj
+*.ko
+*.elf
+
+# Librairies
+*.lib
+*.a
+*.la
+*.lo
+
+# ============================================================================
+# Fichiers de Debug
+# ============================================================================
+
+# Debug symbols
+*.pdb
+*.ilk
+*.map
+*.dSYM/
+
+# Core dumps
+core
+core.*
+*.stackdump
+
+# ============================================================================
+# Dossiers de Build
+# ============================================================================
+
+build/
+bin/
+obj/
+out/
+target/
+Debug/
+Release/
+x64/
+x86/
+
+# ============================================================================
+# IDE et Éditeurs
+# ============================================================================
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+.history/
+
+# Visual Studio
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.user
+*.sln.ide
+
+# CLion / IntelliJ
+.idea/
+cmake-build-*/
+*.iml
+
+# Eclipse
+.project
+.cproject
+.settings/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.*.swp
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================================================
+# Système d'Exploitation
+# ============================================================================
+
+# Windows
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+.directory
+.Trash-*
+
+# ============================================================================
+# Fichiers Temporaires
+# ============================================================================
+
+*.tmp
+*.temp
+*.bak
+*.backup
+*~
+*.log
+*.cache
+
+# ============================================================================
+# Compilation et Dépendances
+# ============================================================================
+
+# Make
+*.d
+*.dep
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+!Makefile.custom
+
+# GCC/Clang
+*.gcno
+*.gcda
+*.gcov
+
+# ============================================================================
+# Fichiers Sensibles (À NE JAMAIS COMMIT)
+# ============================================================================
+
+# Clés et secrets
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.txt
+credentials.txt
+config.private.*
+
+# Shellcodes réels (uniquement les exemples)
+# Décommentez si vous avez des shellcodes réels à exclure
+# shellcode_real.*
+# payload_real.*
+
+# Dumps mémoire
+*.dmp
+*.mdmp
+memdump_*
+
+# ============================================================================
+# Tests et Résultats
+# ============================================================================
+
+# Résultats de tests
+test_results/
+test_output/
+*.test
+
+# Coverage
+coverage/
+*.coverage
+htmlcov/
+
+# ============================================================================
+# Documentation Générée
+# ============================================================================
+
+# Doxygen
+html/
+latex/
+doxygen_sqlite3.db
+
+# Sphinx
+_build/
+_static/
+_templates/
+
+# ============================================================================
+# Archives
+# ============================================================================
+
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+*.bz2
+*.xz
+
+# ============================================================================
+# Environnements Virtuels (si utilisés)
+# ============================================================================
+
+venv/
+env/
+ENV/
+.venv
+
+# ============================================================================
+# Node.js (si outils JavaScript)
+# ============================================================================
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ============================================================================
+# Python (si scripts Python)
+# ============================================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+.pytest_cache/
+
+# ============================================================================
+# Rust (si projets Rust)
+# ============================================================================
+
+Cargo.lock
+target/
+
+# ============================================================================
+# Fichiers Personnels
+# ============================================================================
+
+# Notes personnelles
+notes_perso.txt
+TODO_PERSO.md
+brouillon.*
+
+# Fichiers de test personnels
+test_perso.*
+my_test.*
+
+# ============================================================================
+# Exceptions (Fichiers à INCLURE malgré les règles ci-dessus)
+# ============================================================================
+
+# Réactiver des fichiers spécifiques si nécessaire
+# !important_file.exe
+# !required_script.sh
