@@ -49,56 +49,10 @@
 #include "syscalls.h"
 
 // ============================================================================
-// STRUCTURES POUR PARSER LE FORMAT PE
+// NOTE: Les structures PE sont déjà définies dans windows.h
 // ============================================================================
-
-// DOS Header (début de chaque PE)
-typedef struct _IMAGE_DOS_HEADER
-{
-    WORD e_magic; // Magic number "MZ"
-    WORD e_cblp;
-    WORD e_cp;
-    WORD e_crlc;
-    WORD e_cparhdr;
-    WORD e_minalloc;
-    WORD e_maxalloc;
-    WORD e_ss;
-    WORD e_sp;
-    WORD e_csum;
-    WORD e_ip;
-    WORD e_cs;
-    WORD e_lfarlc;
-    WORD e_ovno;
-    WORD e_res[4];
-    WORD e_oemid;
-    WORD e_oeminfo;
-    WORD e_res2[10];
-    LONG e_lfanew; // Offset vers le NT Header
-} IMAGE_DOS_HEADER, *PIMAGE_DOS_HEADER;
-
-// NT Headers
-typedef struct _IMAGE_NT_HEADERS64
-{
-    DWORD Signature;
-    IMAGE_FILE_HEADER FileHeader;
-    IMAGE_OPTIONAL_HEADER64 OptionalHeader;
-} IMAGE_NT_HEADERS64, *PIMAGE_NT_HEADERS64;
-
-// Export Directory (contient les fonctions exportées)
-typedef struct _IMAGE_EXPORT_DIRECTORY
-{
-    DWORD Characteristics;
-    DWORD TimeDateStamp;
-    WORD MajorVersion;
-    WORD MinorVersion;
-    DWORD Name;
-    DWORD Base;
-    DWORD NumberOfFunctions;     // Nombre de fonctions exportées
-    DWORD NumberOfNames;         // Nombre de noms de fonctions
-    DWORD AddressOfFunctions;    // RVA du tableau d'adresses
-    DWORD AddressOfNames;        // RVA du tableau de noms
-    DWORD AddressOfNameOrdinals; // RVA du tableau d'ordinaux
-} IMAGE_EXPORT_DIRECTORY, *PIMAGE_EXPORT_DIRECTORY;
+// IMAGE_DOS_HEADER, IMAGE_NT_HEADERS64, IMAGE_EXPORT_DIRECTORY, etc.
+// sont disponibles via l'include de windows.h
 
 // ============================================================================
 // VARIABLES GLOBALES POUR LES SYSCALLS INDIRECTS
@@ -163,13 +117,13 @@ static BOOL LoadFreshNtdll()
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
-        printf("[-] Failed to open ntdll.dll: %d\n", GetLastError());
+        printf("[-] Failed to open ntdll.dll: %lu\n", GetLastError());
         return FALSE;
     }
 
     // Obtenir la taille du fichier
     DWORD fileSize = GetFileSize(hFile, NULL);
-    printf("    File size: %d bytes\n", fileSize);
+    printf("    File size: %lu bytes\n", fileSize);
 
     // Allouer de la mémoire pour le fichier
     g_FreshNtdll = VirtualAlloc(NULL, fileSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
@@ -184,7 +138,7 @@ static BOOL LoadFreshNtdll()
     DWORD bytesRead;
     if (!ReadFile(hFile, g_FreshNtdll, fileSize, &bytesRead, NULL))
     {
-        printf("[-] Failed to read ntdll.dll: %d\n", GetLastError());
+        printf("[-] Failed to read ntdll.dll: %lu\n", GetLastError());
         CloseHandle(hFile);
         return FALSE;
     }
@@ -280,7 +234,7 @@ static PVOID FindSyscallAddress(PVOID moduleBase)
         return NULL;
     }
 
-    printf("    .text section: 0x%p - 0x%p (%d bytes)\n",
+    printf("    .text section: 0x%p - 0x%p (%lu bytes)\n",
            textBase, (BYTE *)textBase + textSize, textSize);
 
     // Chercher les bytes : 0F 05 C3 (syscall; ret)
@@ -417,7 +371,7 @@ BOOL InitializeIndirectSyscalls()
         g_SyscallTable[i].ssn = ssn;
         g_SyscallTable[i].syscallAddress = syscallAddress;
 
-        printf("    [%d] %-30s SSN: 0x%04X\n", i, functionNames[i], ssn);
+        printf("    [%d] %-30s SSN: 0x%04lX\n", i, functionNames[i], ssn);
     }
 
     printf("\n[+] Indirect syscalls initialized successfully!\n\n");
